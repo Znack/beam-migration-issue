@@ -32,5 +32,10 @@ Then start GHCi repl with `stack repl` and run:
 λ> createPgConn >>= runDB (createPost "Some author" 1)
 INSERT INTO "post"("id", "content", "author__id") VALUES (DEFAULT, 'Some author', 1)  RETURNING "id", "content", "author__id"
 *** Exception: SqlError {sqlState = "42703", sqlExecStatus = FatalError, sqlErrorMsg = "column \"id\" of relation \"post\" does not exist", sqlErrorDetail = "", sqlErrorHint = ""}
-λ>
+λ> createPgConn >>= runDB selectPosts
+SELECT "t0"."id" AS "res0", "t0"."content" AS "res1", "t0"."author__id" AS "res2" FROM "post" AS "t0"
+*** Exception: SqlError {sqlState = "42703", sqlExecStatus = FatalError, sqlErrorMsg = "column t0.id does not exist", sqlErrorDetail = "", sqlErrorHint = ""}
 ```
+
+We can see that both `INSERT` and `SELECT` commands were generated with `"id"` field although in migrations we have defined `post_id`. 
+Notice that migrations itself have generated the correct DDL commands and database after applying the migrations will have column `post_id` in `post` table.
