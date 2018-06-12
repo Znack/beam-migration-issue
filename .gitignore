@@ -1,0 +1,6 @@
+.stack-work/
+beam-migration-issue.cabal
+*~
+
+.vscode
+.history
