@@ -21,12 +21,12 @@ import qualified Schema.Migrations.V0002ExampleBlog as V0002
 import Schema.Migrations.V0002ExampleBlog hiding (migration)
 
 migration ::
-     MigrationSteps PgCommandSyntax () (CheckedDatabaseSettings Postgres DemoblogDb)
+     MigrationSteps PgCommandSyntax () (CheckedDatabaseSettings Postgres (DemoblogDb UserT))
 migration =
   migrationStep "Add user and post tables" V0001.migration >>>
   migrationStep "Add field created_at to user table" V0002.migration
 
-db :: DatabaseSettings Postgres DemoblogDb
+db :: DatabaseSettings Postgres (DemoblogDb UserT)
 db = unCheckDatabase (evaluateDatabase migration)
 
 

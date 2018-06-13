@@ -50,16 +50,16 @@ instance (Typeable user, Beamable (PrimaryKey user)) => Table (PostT user) where
 --
 -- === DATABASE DEFINITON ===
 --
-data DemoblogDb f = DemoblogDb
+data DemoblogDb user f = DemoblogDb
   { _user :: f (TableEntity UserT)
-  , _post :: f (TableEntity (PostT UserT))
+  , _post :: f (TableEntity (PostT user))
   } deriving (Generic)
 
-instance Database Postgres DemoblogDb
+instance (Typeable user, Beamable (PrimaryKey user)) => Database Postgres (DemoblogDb user)
 
-migration ::
+migration :: forall user. (Typeable user, Beamable (PrimaryKey user)) =>
      ()
-  -> Migration PgCommandSyntax (CheckedDatabaseSettings Postgres DemoblogDb)
+  -> Migration PgCommandSyntax (CheckedDatabaseSettings Postgres (DemoblogDb user))
 migration () =
   DemoblogDb <$>
   createTable

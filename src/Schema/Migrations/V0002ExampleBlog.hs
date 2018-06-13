@@ -51,21 +51,21 @@ instance Table UserT where
 --
 -- === DATABASE DEFINITON ===
 --
-data DemoblogDb f = DemoblogDb
+data DemoblogDb user f = DemoblogDb
   { _user :: f (TableEntity UserT)
-  , _post :: f (TableEntity (PostT UserT))
+  , _post :: f (TableEntity (PostT user))
   } deriving (Generic)
 
-instance Database Postgres DemoblogDb
+instance Database Postgres (DemoblogDb UserT)
 
-currentDb :: CheckedDatabaseSettings Postgres DemoblogDb
+currentDb :: CheckedDatabaseSettings Postgres (DemoblogDb UserT)
 currentDb = defaultMigratableDbSettings @PgCommandSyntax
 
 migration ::
-     CheckedDatabaseSettings Postgres V0001.DemoblogDb
-  -> Migration PgCommandSyntax (CheckedDatabaseSettings Postgres DemoblogDb)
+     CheckedDatabaseSettings Postgres (V0001.DemoblogDb UserT)
+  -> Migration PgCommandSyntax (CheckedDatabaseSettings Postgres (DemoblogDb UserT))
 migration oldDb =
-  DemoblogDb <$> alterUserTable <*> preserve (_post currentDb)
+  DemoblogDb <$> alterUserTable <*> preserve (V0001._post oldDb)
   where
     alterUserTable = alterTable (V0001._user oldDb) tableMigration
     tableMigration oldTable =

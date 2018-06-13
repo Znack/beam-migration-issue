@@ -7,7 +7,7 @@ Beam now has a problem with migrations if one changes the table (add column for 
 Example provided where we have User and Post tables, Post has a link to User, then we add column to user.
 The problem now with link from Post to User, because it leads to outdated version of User.
 As a solution suggested by @tathougies I have parameterized Post (see src/Schema/Migrations/V0001ExampleBlog.hs).
-Now Beam generate invalid SQL for the parameterized Post entities.
+Now there is no way to compose migrations together.
 
 # Reproduce
 Start PostgreSQL server, connect with `psql postgres` and then in psql shell:
@@ -19,23 +19,72 @@ GRANT ALL PRIVILEGES ON DATABASE beam_demoblog TO demoblog;
 ```
 
 
-Then start GHCi repl with `stack repl` and run:
+Then start GHCi repl with `stack repl` and compilation should fail:
 ```
-λ> runMigrations  -- this will create all tables in database
-"startStepHook N0: \"Add user and post tables\""
-"runCommandHook N0: \"CREATE TABLE \\\"user\\\" (\\\"user_id\\\" SERIAL, \\\"name\\\" VARCHAR(255) NOT NULL, PRIMARY KEY(\\\"user_id\\\")) ;\""
-"runCommandHook N0: \"CREATE TABLE \\\"post\\\" (\\\"post_id\\\" SERIAL, \\\"content\\\" TEXT NOT NULL, \\\"user_id\\\" SMALLINT, PRIMARY KEY(\\\"post_id\\\")) ;\""
-"endStepHook N0: \"Add user and post tables\""
-"startStepHook N1: \"Add field created_at to user table\""
-"runCommandHook N1: \"ALTER TABLE \\\"user\\\" ADD COLUMN \\\"created_at\\\" TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL;\""
-"endStepHook N1: \"Add field created_at to user table\""
-λ> createPgConn >>= runDB (createPost "Some author" 1)
-INSERT INTO "post"("id", "content", "author__id") VALUES (DEFAULT, 'Some author', 1)  RETURNING "id", "content", "author__id"
-*** Exception: SqlError {sqlState = "42703", sqlExecStatus = FatalError, sqlErrorMsg = "column \"id\" of relation \"post\" does not exist", sqlErrorDetail = "", sqlErrorHint = ""}
-λ> createPgConn >>= runDB selectPosts
-SELECT "t0"."id" AS "res0", "t0"."content" AS "res1", "t0"."author__id" AS "res2" FROM "post" AS "t0"
-*** Exception: SqlError {sqlState = "42703", sqlExecStatus = FatalError, sqlErrorMsg = "column t0.id does not exist", sqlErrorDetail = "", sqlErrorHint = ""}
+$ stack repl
+
+[1 of 5] Compiling Schema.Migrations.V0001ExampleBlog ( src/Schema/Migrations/V0001ExampleBlog.hs, interpreted )
+
+src/Schema/Migrations/V0001ExampleBlog.hs:64:3: error:
+    • Couldn't match type ‘user’ with ‘UserT’
+      ‘user’ is a rigid type variable bound by
+        the type signature for:
+          migration :: forall (user :: (* -> *) -> *).
+                       (Typeable user, Beamable (PrimaryKey user)) =>
+                       ()
+                       -> Migration
+                            PgCommandSyntax
+                            (CheckedDatabaseSettings Postgres (DemoblogDb user))
+        at src/Schema/Migrations/V0001ExampleBlog.hs:(60,1)-(62,83)
+      Expected type: Migration
+                       PgCommandSyntax
+                       (CheckedDatabaseSettings Postgres (DemoblogDb user))
+        Actual type: free-5.0.2:Control.Monad.Free.Church.F
+                       (MigrationF PgCommandSyntax)
+                       (DemoblogDb
+                          UserT (CheckedDatabaseEntity Postgres (DemoblogDb user)))
+    • In the expression:
+        DemoblogDb
+          <$>
+            createTable
+              "user"
+              (User
+                 (field "user_id" serial)
+                 (field "name" (varchar (Just 255)) notNull))
+          <*>
+            createTable
+              "post"
+              (Post
+                 (field "post_id" serial)
+                 (field "content" text notNull)
+                 (UserId (field "user_id" smallint)))
+      In an equation for ‘migration’:
+          migration ()
+            = DemoblogDb
+                <$>
+                  createTable
+                    "user"
+                    (User
+                       (field "user_id" serial)
+                       (field "name" (varchar (Just 255)) notNull))
+                <*>
+                  createTable
+                    "post"
+                    (Post
+                       (field "post_id" serial)
+                       (field "content" text notNull)
+                       (UserId (field "user_id" smallint)))
+    • Relevant bindings include
+        migration :: ()
+                     -> Migration
+                          PgCommandSyntax
+                          (CheckedDatabaseSettings Postgres (DemoblogDb user))
+          (bound at src/Schema/Migrations/V0001ExampleBlog.hs:63:1)
+   |
+64 |   DemoblogDb <$>
+   |   ^^^^^^^^^^^^^^...
 ```
 
-We can see that both `INSERT` and `SELECT` commands were generated with `"id"` field although in migrations we have defined `post_id`. 
-Notice that migrations itself have generated the correct DDL commands and database after applying the migrations will have column `post_id` in `post` table.
+This error is quite predictable: we have to use concrete Primary Key of the UserT entity for `createTable`, 
+but the whole first migration function should be polymorphic. So we had to have some way to declare foreign key
+to the polymorphic entity. See the `migration` function in `src/Schema/Migrations/V0001ExampleBlog.hs`
